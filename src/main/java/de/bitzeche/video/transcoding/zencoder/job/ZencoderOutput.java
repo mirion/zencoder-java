@@ -34,6 +34,7 @@ import de.bitzeche.video.transcoding.zencoder.enums.ZencoderAspectMode;
 import de.bitzeche.video.transcoding.zencoder.enums.ZencoderAudioCodec;
 import de.bitzeche.video.transcoding.zencoder.enums.ZencoderDeinterlace;
 import de.bitzeche.video.transcoding.zencoder.enums.ZencoderDenoiseFilter;
+import de.bitzeche.video.transcoding.zencoder.enums.ZencoderType;
 import de.bitzeche.video.transcoding.zencoder.enums.ZencoderVideoCodec;
 import de.bitzeche.video.transcoding.zencoder.util.XmlUtility;
 
@@ -55,8 +56,9 @@ public class ZencoderOutput {
 	private String startClip;
 	private String clipLength;
 	private Integer id;
+	private ZencoderType type;
 
-	/*
+  /*
 	 * Video
 	 */
 	private ZencoderVideoCodec videoCodec = ZencoderVideoCodec.h264;
@@ -79,6 +81,8 @@ public class ZencoderOutput {
 	private boolean autolevel = false;
 	private boolean deblock = false;
 	private ZencoderDenoiseFilter denoise = ZencoderDenoiseFilter.NONE;
+	private String h264Profile;
+	private float h264Level;
 	/*
 	 * Audio
 	 */
@@ -96,6 +100,14 @@ public class ZencoderOutput {
 	private String credentials;
 	private List<ZencoderS3AccessControlItem> aclItems = new ArrayList<ZencoderS3AccessControlItem>();
 	private Map<String, String> headers = new HashMap<String, String>();
+
+	/*
+	 * segmented
+	 */
+	private List<ZencoderSegmentedStream> streams;
+  private int segmentSize;
+  private int segmentBandwidth;
+
 
 	public ZencoderOutput(String label) {
 		this.label = label;
@@ -115,7 +127,7 @@ public class ZencoderOutput {
 	public Element createXML(Document document) {
 		this.xmlDocument = document;
 		Element root = createElement("output");
-		
+
 		if (id != null)
 		{
 			createAndAppendElement("id", this.id, root);
@@ -124,60 +136,85 @@ public class ZencoderOutput {
 		createAndAppendElement("url", this.outputURL, root);
 		createAndAppendElement("base_url", this.baseURL, root);
 		createAndAppendElement("filename", this.filename, root);
-		createAndAppendElement("speed", this.speed, root);
-		createAndAppendElement("start_clip", this.startClip, root);
-		createAndAppendElement("clip_length", this.clipLength, root);
-		createAndAppendElement("public", this.isPublic, root);
-		createAndAppendElement("credentials", this.credentials, root);
+    createAndAppendElement("public", this.isPublic, root);
+    createAndAppendElement("credentials", this.credentials, root);
+    createAndAppendElement("type", this.type.getRealName(), root);
 
-		createAndAppendElement("video_codec", this.videoCodec.name(), root);
-		createAndAppendElement("width", this.width, root);
-		createAndAppendElement("height", this.height, root);
-		createAndAppendElement("size", this.size, root);
-		createAndAppendElement("upscale", this.upscale, root);
-		if (!this.aspectMode.equals(ZencoderAspectMode.NONE))
-			createAndAppendElement("aspect_mode", this.aspectMode.name(), root);
-		createAndAppendElement("quality", this.videoQuality, root);
-		createAndAppendElement("video_bitrate", this.videoBitrate, root);
-		createAndAppendElement("bitrate_cap", this.videoBitrateCap, root);
-		createAndAppendElement("buffer_size", this.bufferSize, root);
-		createAndAppendElement("deinterlace", this.deinterlace.name(), root);
-		createAndAppendElement("max_frame_rate", this.maxFrameRate, root);
-		createAndAppendElement("frame_rate", this.frameRate, root);
-		createAndAppendElement("decimate", this.decimate, root);
-		createAndAppendElement("keyframe_interval", this.keyFrameInterval, root);
-		createAndAppendElement("rotate", this.rotate, root);
-		createAndAppendElement("skip_video", this.skipVideo, root);
-		if (!this.denoise.equals(ZencoderDenoiseFilter.NONE))
-			createAndAppendElement("denoise",
-					this.denoise.name().toLowerCase(), root);
-		createAndAppendElement("deblock", this.deblock, root);
-		createAndAppendElement("autolevel", this.autolevel, root);
+    if( this.type != ZencoderType.playlist )
+    {
+      createAndAppendElement("speed", this.speed, root);
+  		createAndAppendElement("start_clip", this.startClip, root);
+  		createAndAppendElement("clip_length", this.clipLength, root);
 
-		createAndAppendElement("audio_codec", this.audioCodec.name(), root);
-		createAndAppendElement("audio_bitrate", this.audioBitrate, root);
-		createAndAppendElement("audio_sample_rate", this.audioSamplerate, root);
-		createAndAppendElement("audio_quality", this.audioQuality, root);
-		createAndAppendElement("audio_channels", this.audioChannels, root);
-		createAndAppendElement("skip_audio", this.skipAudio, root);
+  		createAndAppendElement("video_codec", this.videoCodec.name(), root);
+  		createAndAppendElement("width", this.width, root);
+  		createAndAppendElement("height", this.height, root);
+  		createAndAppendElement("size", this.size, root);
+  		createAndAppendElement("upscale", this.upscale, root);
+  		if (!this.aspectMode.equals(ZencoderAspectMode.NONE))
+  			createAndAppendElement("aspect_mode", this.aspectMode.name(), root);
+  		createAndAppendElement("quality", this.videoQuality, root);
+  		createAndAppendElement("video_bitrate", this.videoBitrate, root);
+  		createAndAppendElement("bitrate_cap", this.videoBitrateCap, root);
+  		createAndAppendElement("buffer_size", this.bufferSize, root);
+  		createAndAppendElement("deinterlace", this.deinterlace.name(), root);
+  		createAndAppendElement("max_frame_rate", this.maxFrameRate, root);
+  		createAndAppendElement("frame_rate", this.frameRate, root);
+  		createAndAppendElement("decimate", this.decimate, root);
+  		createAndAppendElement("keyframe_interval", this.keyFrameInterval, root);
+  		createAndAppendElement("rotate", this.rotate, root);
+  		createAndAppendElement("skip_video", this.skipVideo, root);
+  		if (!this.denoise.equals(ZencoderDenoiseFilter.NONE))
+  			createAndAppendElement("denoise",
+  					this.denoise.name().toLowerCase(), root);
+  		createAndAppendElement("deblock", this.deblock, root);
+  		createAndAppendElement("autolevel", this.autolevel, root);
 
-		if (this.watermarks.size() != 0) {
-			Element wms = document.createElement("watermarks");
-			wms.setAttribute("type", "array");
-			root.appendChild(wms);
-			for (ZencoderWatermark item : this.watermarks) {
-				Element wm = item.createXML(document);
-				if (wm != null) {
-					wms.appendChild(wm);
-				}
-			}
-		}
-		if (this.thumbnail != null) {
-			Element tn = this.thumbnail.createXML(document);
-			if (tn != null) {
-				root.appendChild(tn);
-			}
-		}
+      createAndAppendElement("h264_profile", this.h264Profile, root);
+      createAndAppendElement("h264_level", this.h264Level, root);
+
+  		createAndAppendElement("audio_codec", this.audioCodec.name(), root);
+  		createAndAppendElement("audio_bitrate", this.audioBitrate, root);
+  		createAndAppendElement("audio_sample_rate", this.audioSamplerate, root);
+  		createAndAppendElement("audio_quality", this.audioQuality, root);
+  		createAndAppendElement("audio_channels", this.audioChannels, root);
+  		createAndAppendElement("skip_audio", this.skipAudio, root);
+
+  		if (this.watermarks.size() != 0) {
+  			Element wms = document.createElement("watermarks");
+  			wms.setAttribute("type", "array");
+  			root.appendChild(wms);
+  			for (ZencoderWatermark item : this.watermarks) {
+  				Element wm = item.createXML(document);
+  				if (wm != null) {
+  					wms.appendChild(wm);
+  				}
+  			}
+  		}
+  		if (this.thumbnail != null) {
+  			Element tn = this.thumbnail.createXML(document);
+  			if (tn != null) {
+  				root.appendChild(tn);
+  			}
+  		}
+    }
+    else
+    {
+      createAndAppendElement("segment_size", this.segmentSize, root);
+      if( streams != null )
+      {
+        Element streamsElem = document.createElement( "streams" );
+
+        streamsElem.setAttribute("type", "array");
+        root.appendChild(  streamsElem );
+
+        for( int i = 0; i < streams.size(); ++i )
+        {
+          ZencoderSegmentedStream stream = streams.get( i );
+          streamsElem.appendChild( stream.createXML( document ) );
+        }
+      }
+    }
 		if (this.aclItems.size() != 0) {
 			Element acl = document.createElement("access-controls");
 			root.appendChild(acl);
@@ -280,6 +317,11 @@ public class ZencoderOutput {
 	public Integer getId() {
 		return id;
 	}
+
+  public ZencoderType getType()
+  {
+    return type;
+  }
 
 	public int getSpeed() {
 		return speed;
@@ -388,10 +430,33 @@ public class ZencoderOutput {
 	public boolean isPublic() {
 		return isPublic;
 	}
-	
+
 	public String getCredentials() {
 		return credentials;
 	}
+
+  public String getH264Profile() {
+    return h264Profile;
+  }
+
+  public float getH264Level() {
+    return h264Level;
+  }
+
+  public List< ZencoderSegmentedStream > getStreams()
+  {
+    return streams;
+  }
+
+  public int getSegmentSize()
+  {
+    return segmentSize;
+  }
+
+  public int getSegmentBandwidth()
+  {
+    return segmentBandwidth;
+  }
 
 	/*
 	 * ###### Setters #########
@@ -413,7 +478,12 @@ public class ZencoderOutput {
 		this.id = id;
 	}
 
-	public void setZencoderVideoCodec(ZencoderVideoCodec zencoderVideoCodec) {
+  public void setType( ZencoderType type )
+  {
+    this.type = type;
+  }
+
+  public void setZencoderVideoCodec(ZencoderVideoCodec zencoderVideoCodec) {
 		this.videoCodec = zencoderVideoCodec;
 	}
 
@@ -606,10 +676,18 @@ public class ZencoderOutput {
 	public void setPublic(boolean isPublic) {
 		this.isPublic = isPublic;
 	}
-	
+
 	public void setCredentials(String credentials) {
 		this.credentials = credentials;
 	}
+
+  public void setH264Profile( String h264Profile ) {
+    this.h264Profile = h264Profile;
+  }
+
+  public void setH264Level( float h264Level ) {
+    this.h264Level = h264Level;
+  }
 
 	public void addAcl(ZencoderS3AccessControlItem item) {
 		this.aclItems.add(item);
@@ -618,12 +696,12 @@ public class ZencoderOutput {
 	public void deleteAcl(ZencoderS3AccessControlItem item) {
 		this.aclItems.remove(item);
 	}
-	
+
 	/**
-	 * Add a header for S3 outputs.  See Amazon documentation for options: 
+	 * Add a header for S3 outputs.  See Amazon documentation for options:
 	 * http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTObjectPUT.html?r=7050
 	 * These values are ignored for non-S3 outputs.
-	 * 
+	 *
 	 * @param name Header name
 	 * @param value Header value
 	 */
@@ -658,6 +736,29 @@ public class ZencoderOutput {
 	public void setDenoise(ZencoderDenoiseFilter denoise) {
 		this.denoise = denoise;
 	}
+
+  public void setStreams( List< ZencoderSegmentedStream > streams )
+  {
+    this.streams = streams;
+  }
+
+  public void addStream( ZencoderSegmentedStream stream )
+  {
+    if( streams == null )
+      streams = new ArrayList< ZencoderSegmentedStream >();
+
+    streams.add( stream );
+  }
+
+  public void setSegmentSize( int segmentSize )
+  {
+    this.segmentSize = segmentSize;
+  }
+
+  public void setSegmentBandwidth( int segmentBandwidth )
+  {
+    this.segmentBandwidth = segmentBandwidth;
+  }
 
 	public String toString() {
 		Element elem;

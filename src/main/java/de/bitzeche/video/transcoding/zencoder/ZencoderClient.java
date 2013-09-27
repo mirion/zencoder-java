@@ -65,7 +65,7 @@ public class ZencoderClient implements IZencoderClient {
 	private final String zencoderAPIKey;
 	private final ZencoderAPIVersion zencoderAPIVersion;
 	private XPath xPath;
-	
+
 	private final int MAX_CONNECTION_ATTEMPTS = 5;
 	private int currentConnectionAttempt = 0;
 
@@ -83,11 +83,11 @@ public class ZencoderClient implements IZencoderClient {
 
 		httpClient = ApacheHttpClient.create();
 		httpClient.setFollowRedirects(true);
-		
+
 		// set a 20 second timeout on the client
 		httpClient.setConnectTimeout(20000);
 		httpClient.setReadTimeout(20000);
-		
+
 		xPath = XPathFactory.newInstance().newXPath();
 		zencoderAPIBaseUrl = zencoderAPIVersion.getBaseUrl();
 	}
@@ -104,43 +104,57 @@ public class ZencoderClient implements IZencoderClient {
 
 	private Integer findIdFromOutputNode(Node output)
 			throws XPathExpressionException {
-		Double idDouble = (Double) xPath.evaluate("output/id", output,
+		Double idDouble = (Double) xPath.evaluate("id", output,
 				XPathConstants.NUMBER);
 		return idDouble == null ? null : idDouble.intValue();
 	}
 
 	/**
 	 * Complete output IDs from response.
-	 * 
+	 *
 	 * @param job
 	 * @param response
 	 */
 	private void completeJobInfo(ZencoderJob job, Document response) {
 		try {
 			NodeList outputs = (NodeList) xPath.evaluate(
-					"/api-response/job/outputs", response,
+					"/api-response/job/outputs/output", response,
 					XPathConstants.NODESET);
 			if (job.getOutputs().size() == 1) {
 				Integer id = findIdFromOutputNode(outputs.item(0));
 				if (id != null) {
 					job.getOutputs().get(0).setId(id);
 				}
+        String url = (String) xPath.evaluate("url",
+            outputs.item(0), XPathConstants.STRING);
+        job.getOutputs().get(0).setOutputURL( url );
 			} else {
 				// try via labels
 				Map<String, Integer> ids = new HashMap<String, Integer>();
+        Map<String, String> urls = new HashMap<String, String>();
 				int outputSize = outputs.getLength();
 				for (int i = 0; i < outputSize; i++) {
-					String label = (String) xPath.evaluate("output/label",
+					String label = (String) xPath.evaluate("label",
 							outputs.item(i), XPathConstants.STRING);
 					if (label != null && !label.isEmpty()) {
 						int id = findIdFromOutputNode(outputs.item(i));
 						ids.put(label, new Integer(id));
+
+						String url = (String) xPath.evaluate("url",
+	              outputs.item(i), XPathConstants.STRING);
+						urls.put(  label, url );
 					}
 				}
 				for (ZencoderOutput zcOutput : job.getOutputs()) {
 					Integer foundId = ids.get(zcOutput.getLabel());
 					if (foundId != null) {
 						zcOutput.setId(foundId);
+					}
+
+					if( zcOutput.getOutputURL() == null )
+					{
+					  String url = urls.get(zcOutput.getLabel());
+					  zcOutput.setOutputURL( url );
 					}
 				}
 			}
@@ -149,12 +163,12 @@ public class ZencoderClient implements IZencoderClient {
 			LOGGER.error("XPath threw Exception", e);
 		}
 	}
-	
+
 	private void resetConnectionCount() {
 		// reset to 0 for use in tracking connections next time
 		currentConnectionAttempt = 0;
 	}
-	
+
 	private Document createDocumentForException(String message) {
 		try {
 			DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
@@ -207,10 +221,10 @@ public class ZencoderClient implements IZencoderClient {
 					response, XPathConstants.STRING);
 			if (StringUtils.isNotEmpty(id)) {
 				job.setJobId(Integer.parseInt(id));
+	      completeJobInfo(job, response);
 				resetConnectionCount();
 				return response;
 			}
-			completeJobInfo(job, response);
 			LOGGER.error("Error when sending request to Zencoder: ", response);
 			resetConnectionCount();
 			throw new ZencoderErrorResponseException(response);
