@@ -138,7 +138,7 @@ public class ZencoderOutput {
 		createAndAppendElement("filename", this.filename, root);
     createAndAppendElement("public", this.isPublic, root);
     createAndAppendElement("credentials", this.credentials, root);
-    createAndAppendElement("type", this.type.getRealName(), root);
+    createAndAppendElement("type", this.type == null ? null : this.type.getRealName(), root);
 
     if( this.type != ZencoderType.playlist )
     {
